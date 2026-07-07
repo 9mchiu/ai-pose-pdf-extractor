@@ -3,32 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PDF → Word 轉換器（純瀏覽器）</title>
+<title>PDF → Word 轉換器（保留版面）</title>
 <!-- 全部在瀏覽器執行，檔案不會上傳到任何伺服器 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body {
-    font-family:'Microsoft JhengHei','微軟正黑體',-apple-system,Arial,sans-serif;
-    background:linear-gradient(135deg,#eef2f7 0%,#dfe7f0 100%);
-    min-height:100vh; display:flex; align-items:center; justify-content:center;
-    color:#2c3e50; padding:20px;
-  }
-  .card {
-    width:min(94vw,600px); background:#fff; border-radius:20px;
-    box-shadow:0 10px 40px rgba(44,62,80,.12); padding:36px; text-align:center;
-  }
+  body { font-family:'Microsoft JhengHei','微軟正黑體',-apple-system,Arial,sans-serif;
+    background:linear-gradient(135deg,#eef2f7 0%,#dfe7f0 100%); min-height:100vh;
+    display:flex; align-items:center; justify-content:center; color:#2c3e50; padding:20px; }
+  .card { width:min(94vw,600px); background:#fff; border-radius:20px;
+    box-shadow:0 10px 40px rgba(44,62,80,.12); padding:36px; text-align:center; }
   h1 { font-size:23px; margin-bottom:6px; }
   .subtitle { color:#7f8c9a; font-size:14px; margin-bottom:20px; line-height:1.6; }
-  .opts { display:flex; gap:10px; justify-content:center; align-items:center;
-          margin-bottom:20px; font-size:14px; color:#5a6b7b; }
+  .opts { display:flex; gap:10px; justify-content:center; align-items:center; margin-bottom:20px; font-size:14px; color:#5a6b7b; }
   select { padding:6px 10px; border:1px solid #cfd8e2; border-radius:8px; font-size:14px; }
-  #drop {
-    border:3px dashed #a9bcd0; border-radius:16px; padding:44px 20px;
-    cursor:pointer; transition:all .2s ease; background:#f7fafc;
-  }
+  #drop { border:3px dashed #a9bcd0; border-radius:16px; padding:44px 20px; cursor:pointer; transition:all .2s ease; background:#f7fafc; }
   #drop.hover { border-color:#4a90d9; background:#eaf3fc; transform:scale(1.01); }
   #drop .icon { font-size:44px; }
   #drop .hint { margin-top:12px; color:#5a6b7b; font-size:15px; }
@@ -38,12 +29,10 @@
   .status { margin-top:14px; min-height:22px; font-size:14px; }
   .bar-wrap { margin-top:14px; height:8px; background:#e8eef5; border-radius:6px; overflow:hidden; display:none; }
   .bar { height:100%; width:0%; background:#4a90d9; transition:width .3s ease; }
-  .log { margin-top:12px; text-align:left; font-size:12px; color:#8593a0;
-         max-height:120px; overflow:auto; background:#f7fafc; border-radius:8px;
-         padding:8px 10px; display:none; white-space:pre-wrap; }
-  .spinner { display:inline-block; width:16px; height:16px; border:3px solid #cfe0f0;
-    border-top-color:#4a90d9; border-radius:50%; animation:spin .8s linear infinite;
-    vertical-align:middle; margin-right:8px; }
+  .log { margin-top:12px; text-align:left; font-size:12px; color:#8593a0; max-height:120px; overflow:auto;
+    background:#f7fafc; border-radius:8px; padding:8px 10px; display:none; white-space:pre-wrap; }
+  .spinner { display:inline-block; width:16px; height:16px; border:3px solid #cfe0f0; border-top-color:#4a90d9;
+    border-radius:50%; animation:spin .8s linear infinite; vertical-align:middle; margin-right:8px; }
   @keyframes spin { to { transform:rotate(360deg); } }
   .ok { color:#27ae60; font-weight:bold; }
   .err { color:#e74c3c; font-weight:bold; }
@@ -53,8 +42,7 @@
 <body>
 <div class="card">
   <h1>📄 PDF → Word 轉換器</h1>
-  <div class="subtitle">拖拉 PDF 進來，文字轉文字、圖片保留為圖片，下載 Word 檔<br>全程在你的瀏覽器執行，檔案不會上傳</div>
-
+  <div class="subtitle">拖拉 PDF 進來，<b>保留原本版面位置</b>轉成 Word（文字定位、圖片就位）<br>全程在你的瀏覽器執行，檔案不會上傳</div>
   <div class="opts">
     <label>文件語言：
       <select id="lang">
@@ -64,166 +52,204 @@
       </select>
     </label>
   </div>
-
   <div id="drop">
     <div class="icon">📥</div>
     <div class="hint">把 PDF 拖到這裡</div>
     <div class="sub">或點擊選擇檔案</div>
   </div>
   <input type="file" id="fileInput" accept="application/pdf">
-
   <div class="file-name" id="fileName"></div>
   <div class="bar-wrap" id="barWrap"><div class="bar" id="bar"></div></div>
   <div class="status" id="status"></div>
   <div class="log" id="log"></div>
-
   <div class="privacy">🔒 純本機處理：不上傳、不留存，關掉分頁即消失</div>
 </div>
 
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-const drop = document.getElementById('drop');
-const fileInput = document.getElementById('fileInput');
-const statusEl = document.getElementById('status');
-const fileNameEl = document.getElementById('fileName');
-const logEl = document.getElementById('log');
-const barWrap = document.getElementById('barWrap');
-const bar = document.getElementById('bar');
-const langSel = document.getElementById('lang');
+// 單位換算： PDF 用「點(pt)」，1 inch = 72pt
+const PT2TW = 20;        // twips  (Word 版面/框位置)
+const PT2EMU = 12700;    // EMU    (浮動圖片位置)
+const PT2PX = 96 / 72;   // px     (圖片顯示尺寸，96dpi)
 
-drop.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', () => { if (fileInput.files[0]) handle(fileInput.files[0]); });
-['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('hover'); }));
-['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('hover'); }));
-drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) handle(f); });
+const drop=document.getElementById('drop'), fileInput=document.getElementById('fileInput');
+const statusEl=document.getElementById('status'), fileNameEl=document.getElementById('fileName');
+const logEl=document.getElementById('log'), barWrap=document.getElementById('barWrap'), bar=document.getElementById('bar');
+const langSel=document.getElementById('lang');
 
-function setStatus(html, cls){ statusEl.className = 'status ' + (cls||''); statusEl.innerHTML = html; }
-function log(msg){ logEl.style.display='block'; logEl.textContent += msg + '\n'; logEl.scrollTop = logEl.scrollHeight; }
-function setBar(p){ barWrap.style.display='block'; bar.style.width = Math.round(p*100) + '%'; }
+drop.addEventListener('click',()=>fileInput.click());
+fileInput.addEventListener('change',()=>{ if(fileInput.files[0]) handle(fileInput.files[0]); });
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('hover');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('hover');}));
+drop.addEventListener('drop',e=>{const f=e.dataTransfer.files[0]; if(f) handle(f);});
+
+function setStatus(h,c){ statusEl.className='status '+(c||''); statusEl.innerHTML=h; }
+function log(m){ logEl.style.display='block'; logEl.textContent+=m+'\n'; logEl.scrollTop=logEl.scrollHeight; }
+function setBar(p){ barWrap.style.display='block'; bar.style.width=Math.round(p*100)+'%'; }
 function reset(){ fileInput.value=''; fileNameEl.textContent=''; }
 
-// ── 把 pdf.js 影像物件轉成 PNG dataURL ──
+// ── 影像物件轉 PNG ──
 function imgToPng(img){
   try{
-    const w = img.width, h = img.height;
-    if(!w || !h) return null;
-    const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    if(img.bitmap){ ctx.drawImage(img.bitmap, 0, 0); return { url: canvas.toDataURL('image/png'), w, h }; }
+    const w=img.width,h=img.height; if(!w||!h) return null;
+    const c=document.createElement('canvas'); c.width=w; c.height=h; const ctx=c.getContext('2d');
+    if(img.bitmap){ ctx.drawImage(img.bitmap,0,0); return {url:c.toDataURL('image/png'),w,h}; }
     if(!img.data) return null;
-    const out = ctx.createImageData(w, h);
-    const d = img.data;
-    if(img.kind === 3){ out.data.set(d); }                       // RGBA
-    else if(img.kind === 2){                                     // RGB → RGBA
-      for(let i=0,j=0;i<d.length;i+=3,j+=4){ out.data[j]=d[i]; out.data[j+1]=d[i+1]; out.data[j+2]=d[i+2]; out.data[j+3]=255; }
-    } else { return null; }                                      // 其他(如1bpp)略過
-    ctx.putImageData(out, 0, 0);
-    return { url: canvas.toDataURL('image/png'), w, h };
+    const out=ctx.createImageData(w,h), d=img.data;
+    if(img.kind===3){ out.data.set(d); }
+    else if(img.kind===2){ for(let i=0,j=0;i<d.length;i+=3,j+=4){ out.data[j]=d[i];out.data[j+1]=d[i+1];out.data[j+2]=d[i+2];out.data[j+3]=255; } }
+    else return null;
+    ctx.putImageData(out,0,0);
+    return {url:c.toDataURL('image/png'),w,h};
   }catch(e){ return null; }
 }
-function getObj(page, name){ return new Promise(res => { try { page.objs.get(name, res); } catch(e){ res(null); } }); }
-function dataURLtoU8(url){ const b = atob(url.split(',')[1]); const u = new Uint8Array(b.length); for(let i=0;i<b.length;i++) u[i]=b.charCodeAt(i); return u; }
+function getObj(page,name){ return new Promise(res=>{ try{ page.objs.get(name,res); }catch(e){ res(null); } }); }
+function dataURLtoU8(u){ const b=atob(u.split(',')[1]); const a=new Uint8Array(b.length); for(let i=0;i<b.length;i++) a[i]=b.charCodeAt(i); return a; }
+function mul(m,n){ return [ m[0]*n[0]+m[2]*n[1], m[1]*n[0]+m[3]*n[1], m[0]*n[2]+m[2]*n[3], m[1]*n[2]+m[3]*n[3], m[0]*n[4]+m[2]*n[5]+m[4], m[1]*n[4]+m[3]*n[5]+m[5] ]; }
 
-// ── 從文字層重建成一行一行 ──
-function textItemsToLines(items){
-  const lines = {};
+// ── 數位頁：把文字項目依基線分行，保留每行位置 ──
+function digitalLines(items,pageH){
+  const rows={};
   for(const it of items){
-    if(!it.str) continue;
-    const y = Math.round(it.transform[5]);
-    (lines[y] = lines[y] || []).push({ x: it.transform[4], s: it.str });
+    if(!it.str||!it.str.trim()) continue;
+    const t=it.transform, y=Math.round(t[5]);
+    const h=it.height||Math.hypot(t[2],t[3])||10;
+    (rows[y]=rows[y]||[]).push({x:t[4],w:it.width||0,h,s:it.str});
   }
-  return Object.keys(lines).map(Number).sort((a,b)=>b-a)   // y 由大到小 = 由上到下
-    .map(y => lines[y].sort((a,b)=>a.x-b.x).map(o=>o.s).join('').trim())
-    .filter(s => s.length);
+  const lines=[];
+  for(const yk of Object.keys(rows)){
+    const arr=rows[yk].sort((a,b)=>a.x-b.x);
+    const text=arr.map(o=>o.s).join(''); if(!text.trim()) continue;
+    const fontPt=Math.max(...arr.map(o=>o.h));
+    const left=arr[0].x, last=arr[arr.length-1];
+    lines.push({ text, leftPt:left, topPt:pageH-Number(yk)-fontPt, fontPt, widthPt:Math.max((last.x+(last.w||0))-left,20) });
+  }
+  return lines;
+}
+
+// ── 掃描頁：OCR 逐行 bbox → 位置 ──
+function ocrLines(data,scale){
+  const lines=[];
+  const blocks=data.blocks||[];
+  for(const bk of blocks) for(const pa of (bk.paragraphs||[])) for(const ln of (pa.lines||[])){
+    const t=(ln.text||'').trim(); if(!t) continue; const b=ln.bbox;
+    const hPt=(b.y1-b.y0)/scale;
+    lines.push({ text:t, leftPt:b.x0/scale, topPt:b.y0/scale, fontPt:Math.max(6,hPt*0.85), widthPt:Math.max((b.x1-b.x0)/scale,20) });
+  }
+  return lines;
+}
+
+// ── 追蹤繪圖矩陣，取得每張圖的位置與大小 ──
+async function pageImages(page,pageW,pageH,isScanned){
+  const out=[]; let ops;
+  try{ ops=await page.getOperatorList(); }catch(e){ return out; }
+  let ctm=[1,0,0,1,0,0]; const st=[]; const OPS=pdfjsLib.OPS;
+  for(let i=0;i<ops.fnArray.length;i++){
+    const fn=ops.fnArray[i], a=ops.argsArray[i];
+    if(fn===OPS.save) st.push(ctm.slice());
+    else if(fn===OPS.restore) ctm=st.pop()||[1,0,0,1,0,0];
+    else if(fn===OPS.transform) ctm=mul(ctm,a);
+    else if(fn===OPS.paintImageXObject){
+      try{
+        const png=imgToPng(await getObj(page,a[0])); if(!png) continue;
+        const wPt=Math.abs(ctm[0]), hPt=Math.abs(ctm[3]);
+        if(wPt<8||hPt<8) continue;
+        const xLeft=Math.min(ctm[4],ctm[4]+ctm[0]);
+        const yBottom=Math.min(ctm[5],ctm[5]+ctm[3]);
+        const coversPage = wPt>=pageW*0.85 && hPt>=pageH*0.85;
+        if(isScanned && coversPage) continue;   // 掃描整頁大圖略過(已 OCR 成定位文字)
+        out.push({ png, xPt:xLeft, yPt:pageH-(yBottom+hPt), wPt, hPt });
+      }catch(e){}
+    }
+  }
+  return out;
 }
 
 async function handle(file){
   if(!file.name.toLowerCase().endsWith('.pdf')){ setStatus('請選擇 PDF 檔','err'); return; }
-  fileNameEl.textContent = file.name;
-  logEl.textContent = ''; logEl.style.display='none';
-  setStatus('<span class="spinner"></span>準備中…');
-  setBar(0);
-
+  fileNameEl.textContent=file.name; logEl.textContent=''; logEl.style.display='none';
+  setStatus('<span class="spinner"></span>準備中…'); setBar(0);
+  let worker=null;
   try{
-    const buf = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-    const N = pdf.numPages;
-    const lang = langSel.value;
+    const D=docx;
+    const buf=await file.arrayBuffer();
+    const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+    const N=pdf.numPages, lang=langSel.value;
+    const sections=[];
 
-    const { Document, Packer, Paragraph, TextRun, ImageRun, PageBreak } = docx;
-    const children = [];
+    for(let p=1;p<=N;p++){
+      const page=await pdf.getPage(p);
+      const vp=page.getViewport({scale:1}); const pageW=vp.width, pageH=vp.height;
 
-    for(let p=1; p<=N; p++){
-      const page = await pdf.getPage(p);
-      const baseVp = page.getViewport({ scale: 1 });
-
-      // 1) 文字層
-      const tc = await page.getTextContent();
-      let lines = textItemsToLines(tc.items);
-      const digitalText = lines.join('').replace(/\s/g,'');
-      const isScanned = digitalText.length < 10;   // 幾乎沒有文字層 → 視為掃描頁
+      const tc=await page.getTextContent();
+      let lines=digitalLines(tc.items,pageH);
+      const textLen=lines.map(l=>l.text).join('').replace(/\s/g,'').length;
+      const isScanned=textLen<10;
 
       if(isScanned){
         setStatus(`<span class="spinner"></span>第 ${p}/${N} 頁：OCR 辨識中…`);
-        const scale = 2.0;
-        const vp = page.getViewport({ scale });
-        const canvas = document.createElement('canvas');
-        canvas.width = vp.width; canvas.height = vp.height;
-        await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-        const res = await Tesseract.recognize(canvas, lang, {
-          logger: m => { if(m.status==='recognizing text') setBar((p-1+m.progress)/N); }
-        });
-        lines = (res.data.text || '').split('\n').map(s=>s.trim()).filter(s=>s.length);
-        log(`第 ${p} 頁：掃描頁 → OCR 完成`);
+        const scale=2.5, ov=page.getViewport({scale});
+        const cv=document.createElement('canvas'); cv.width=ov.width; cv.height=ov.height;
+        await page.render({canvasContext:cv.getContext('2d'),viewport:ov}).promise;
+        if(!worker){ worker=await Tesseract.createWorker(lang,1,{ logger:m=>{ if(m.status==='recognizing text') setBar((p-1+m.progress)/N); } }); }
+        const { data }=await worker.recognize(cv,{},{blocks:true});
+        lines=ocrLines(data,scale);
+        log(`第 ${p} 頁：掃描頁 → OCR 定位 ${lines.length} 行`);
       } else {
-        log(`第 ${p} 頁：數位文字層 → 直接擷取`);
+        log(`第 ${p} 頁：數位頁 → 直接定位 ${lines.length} 行`);
       }
 
-      for(const line of lines) children.push(new Paragraph({ children:[ new TextRun(line) ] }));
+      const images=await pageImages(page,pageW,pageH,isScanned);
+      if(images.length) log(`　　圖片 ${images.length} 張`);
 
-      // 2) 內嵌圖片（盡力擷取；數位頁的插圖、掃描頁的非整頁圖）
-      try{
-        const ops = await page.getOperatorList();
-        for(let i=0;i<ops.fnArray.length;i++){
-          if(ops.fnArray[i] === pdfjsLib.OPS.paintImageXObject){
-            const name = ops.argsArray[i][0];
-            const obj = await getObj(page, name);
-            if(!obj) continue;
-            const png = imgToPng(obj);
-            if(!png) continue;
-            // 掃描頁的整頁大圖略過（已 OCR 成文字，避免重複）
-            const coversPage = png.w >= baseVp.width*0.85 && png.h >= baseVp.height*0.85;
-            if(isScanned && coversPage) continue;
-            let dispW = Math.min(600, png.w);
-            let dispH = png.h * (dispW / png.w);
-            children.push(new Paragraph({ children:[ new ImageRun({
-              data: dataURLtoU8(png.url), transformation:{ width: dispW, height: dispH }
-            })]}));
+      const children=[];
+      // 先放圖片(浮動)，再放文字(定位框)
+      for(const im of images){
+        const wPx=Math.max(4,Math.round(im.wPt*PT2PX)), hPx=Math.max(4,Math.round(im.hPt*PT2PX));
+        children.push(new D.Paragraph({ children:[ new D.ImageRun({
+          data:dataURLtoU8(im.png.url),
+          transformation:{ width:wPx, height:hPx },
+          floating:{
+            horizontalPosition:{ relative:D.HorizontalPositionRelativeFrom.PAGE, offset:Math.round(im.xPt*PT2EMU) },
+            verticalPosition:{ relative:D.VerticalPositionRelativeFrom.PAGE, offset:Math.round(im.yPt*PT2EMU) },
+            allowOverlap:true, behindDocument:false, wrap:{ type:D.TextWrappingType.NONE }
           }
-        }
-      }catch(e){ /* 圖片擷取失敗不影響文字 */ }
+        })]}));
+      }
+      for(const L of lines){
+        children.push(new D.Paragraph({
+          frame:{ type:'absolute',
+            position:{ x:Math.round(L.leftPt*PT2TW), y:Math.round(L.topPt*PT2TW) },
+            width:Math.round((L.widthPt+12)*PT2TW), height:Math.round(L.fontPt*2.4*PT2TW),
+            anchor:{ horizontal:D.FrameAnchorType.PAGE, vertical:D.FrameAnchorType.PAGE } },
+          children:[ new D.TextRun({ text:L.text, size:Math.max(8,Math.round(L.fontPt*2)) }) ]
+        }));
+      }
+      children.push(new D.Paragraph({ text:'' }));   // 版面錨點
 
-      if(p < N) children.push(new Paragraph({ children:[ new PageBreak() ] }));
+      sections.push({
+        properties:{ page:{
+          size:{ width:Math.round(pageW*PT2TW), height:Math.round(pageH*PT2TW) },
+          margin:{ top:0,right:0,bottom:0,left:0 } } },
+        children
+      });
       setBar(p/N);
     }
 
     setStatus('<span class="spinner"></span>產生 Word 檔…');
-    const doc = new Document({ sections:[{ children }] });
-    const blob = await Packer.toBlob(doc);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = file.name.replace(/\.pdf$/i,'') + '.docx';
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
+    const doc=new D.Document({ sections });
+    const blob=await D.Packer.toBlob(doc);
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=file.name.replace(/\.pdf$/i,'')+'.docx';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 
-    setStatus('✓ 完成！Word 檔已下載，內容已清空','ok');
-    reset();
-    setTimeout(()=>{ if(statusEl.classList.contains('ok')){ setStatus(''); barWrap.style.display='none'; } }, 5000);
+    setStatus('✓ 完成！Word 檔已下載，內容已清空','ok'); reset();
+    setTimeout(()=>{ if(statusEl.classList.contains('ok')){ setStatus(''); barWrap.style.display='none'; } },5000);
   }catch(err){
-    console.error(err);
-    setStatus('❌ 發生錯誤：' + err.message, 'err');
+    console.error(err); setStatus('❌ 發生錯誤：'+err.message,'err');
+  }finally{
+    if(worker){ try{ await worker.terminate(); }catch(e){} }
   }
 }
 </script>
