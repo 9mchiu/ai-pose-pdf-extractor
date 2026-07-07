@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF → Word 轉換器（純瀏覽器）</title>
+<!-- 全部在瀏覽器執行，檔案不會上傳到任何伺服器 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family:'Microsoft JhengHei','微軟正黑體',-apple-system,Arial,sans-serif;
+    background:linear-gradient(135deg,#eef2f7 0%,#dfe7f0 100%);
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    color:#2c3e50; padding:20px;
+  }
+  .card {
+    width:min(94vw,600px); background:#fff; border-radius:20px;
+    box-shadow:0 10px 40px rgba(44,62,80,.12); padding:36px; text-align:center;
+  }
+  h1 { font-size:23px; margin-bottom:6px; }
+  .subtitle { color:#7f8c9a; font-size:14px; margin-bottom:20px; line-height:1.6; }
+  .opts { display:flex; gap:10px; justify-content:center; align-items:center;
+          margin-bottom:20px; font-size:14px; color:#5a6b7b; }
+  select { padding:6px 10px; border:1px solid #cfd8e2; border-radius:8px; font-size:14px; }
+  #drop {
+    border:3px dashed #a9bcd0; border-radius:16px; padding:44px 20px;
+    cursor:pointer; transition:all .2s ease; background:#f7fafc;
+  }
+  #drop.hover { border-color:#4a90d9; background:#eaf3fc; transform:scale(1.01); }
+  #drop .icon { font-size:44px; }
+  #drop .hint { margin-top:12px; color:#5a6b7b; font-size:15px; }
+  #drop .sub { margin-top:6px; color:#9aa8b5; font-size:13px; }
+  input[type=file] { display:none; }
+  .file-name { color:#4a90d9; font-weight:bold; margin-top:14px; min-height:20px; }
+  .status { margin-top:14px; min-height:22px; font-size:14px; }
+  .bar-wrap { margin-top:14px; height:8px; background:#e8eef5; border-radius:6px; overflow:hidden; display:none; }
+  .bar { height:100%; width:0%; background:#4a90d9; transition:width .3s ease; }
+  .log { margin-top:12px; text-align:left; font-size:12px; color:#8593a0;
+         max-height:120px; overflow:auto; background:#f7fafc; border-radius:8px;
+         padding:8px 10px; display:none; white-space:pre-wrap; }
+  .spinner { display:inline-block; width:16px; height:16px; border:3px solid #cfe0f0;
+    border-top-color:#4a90d9; border-radius:50%; animation:spin .8s linear infinite;
+    vertical-align:middle; margin-right:8px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .ok { color:#27ae60; font-weight:bold; }
+  .err { color:#e74c3c; font-weight:bold; }
+  .privacy { margin-top:18px; font-size:12px; color:#9aa8b5; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>📄 PDF → Word 轉換器</h1>
+  <div class="subtitle">拖拉 PDF 進來，文字轉文字、圖片保留為圖片，下載 Word 檔<br>全程在你的瀏覽器執行，檔案不會上傳</div>
+
+  <div class="opts">
+    <label>文件語言：
+      <select id="lang">
+        <option value="eng+chi_tra">中英文</option>
+        <option value="eng">英文</option>
+        <option value="chi_tra">中文</option>
+      </select>
+    </label>
+  </div>
+
+  <div id="drop">
+    <div class="icon">📥</div>
+    <div class="hint">把 PDF 拖到這裡</div>
+    <div class="sub">或點擊選擇檔案</div>
+  </div>
+  <input type="file" id="fileInput" accept="application/pdf">
+
+  <div class="file-name" id="fileName"></div>
+  <div class="bar-wrap" id="barWrap"><div class="bar" id="bar"></div></div>
+  <div class="status" id="status"></div>
+  <div class="log" id="log"></div>
+
+  <div class="privacy">🔒 純本機處理：不上傳、不留存，關掉分頁即消失</div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('fileInput');
+const statusEl = document.getElementById('status');
+const fileNameEl = document.getElementById('fileName');
+const logEl = document.getElementById('log');
+const barWrap = document.getElementById('barWrap');
+const bar = document.getElementById('bar');
+const langSel = document.getElementById('lang');
+
+drop.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) handle(fileInput.files[0]); });
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('hover'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('hover'); }));
+drop.addEventListener('drop', e => { const f = e.dataTransfer.files[0]; if (f) handle(f); });
+
+function setStatus(html, cls){ statusEl.className = 'status ' + (cls||''); statusEl.innerHTML = html; }
+function log(msg){ logEl.style.display='block'; logEl.textContent += msg + '\n'; logEl.scrollTop = logEl.scrollHeight; }
+function setBar(p){ barWrap.style.display='block'; bar.style.width = Math.round(p*100) + '%'; }
+function reset(){ fileInput.value=''; fileNameEl.textContent=''; }
+
+// ── 把 pdf.js 影像物件轉成 PNG dataURL ──
+function imgToPng(img){
+  try{
+    const w = img.width, h = img.height;
+    if(!w || !h) return null;
+    const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if(img.bitmap){ ctx.drawImage(img.bitmap, 0, 0); return { url: canvas.toDataURL('image/png'), w, h }; }
+    if(!img.data) return null;
+    const out = ctx.createImageData(w, h);
+    const d = img.data;
+    if(img.kind === 3){ out.data.set(d); }                       // RGBA
+    else if(img.kind === 2){                                     // RGB → RGBA
+      for(let i=0,j=0;i<d.length;i+=3,j+=4){ out.data[j]=d[i]; out.data[j+1]=d[i+1]; out.data[j+2]=d[i+2]; out.data[j+3]=255; }
+    } else { return null; }                                      // 其他(如1bpp)略過
+    ctx.putImageData(out, 0, 0);
+    return { url: canvas.toDataURL('image/png'), w, h };
+  }catch(e){ return null; }
+}
+function getObj(page, name){ return new Promise(res => { try { page.objs.get(name, res); } catch(e){ res(null); } }); }
+function dataURLtoU8(url){ const b = atob(url.split(',')[1]); const u = new Uint8Array(b.length); for(let i=0;i<b.length;i++) u[i]=b.charCodeAt(i); return u; }
+
+// ── 從文字層重建成一行一行 ──
+function textItemsToLines(items){
+  const lines = {};
+  for(const it of items){
+    if(!it.str) continue;
+    const y = Math.round(it.transform[5]);
+    (lines[y] = lines[y] || []).push({ x: it.transform[4], s: it.str });
+  }
+  return Object.keys(lines).map(Number).sort((a,b)=>b-a)   // y 由大到小 = 由上到下
+    .map(y => lines[y].sort((a,b)=>a.x-b.x).map(o=>o.s).join('').trim())
+    .filter(s => s.length);
+}
+
+async function handle(file){
+  if(!file.name.toLowerCase().endsWith('.pdf')){ setStatus('請選擇 PDF 檔','err'); return; }
+  fileNameEl.textContent = file.name;
+  logEl.textContent = ''; logEl.style.display='none';
+  setStatus('<span class="spinner"></span>準備中…');
+  setBar(0);
+
+  try{
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const N = pdf.numPages;
+    const lang = langSel.value;
+
+    const { Document, Packer, Paragraph, TextRun, ImageRun, PageBreak } = docx;
+    const children = [];
+
+    for(let p=1; p<=N; p++){
+      const page = await pdf.getPage(p);
+      const baseVp = page.getViewport({ scale: 1 });
+
+      // 1) 文字層
+      const tc = await page.getTextContent();
+      let lines = textItemsToLines(tc.items);
+      const digitalText = lines.join('').replace(/\s/g,'');
+      const isScanned = digitalText.length < 10;   // 幾乎沒有文字層 → 視為掃描頁
+
+      if(isScanned){
+        setStatus(`<span class="spinner"></span>第 ${p}/${N} 頁：OCR 辨識中…`);
+        const scale = 2.0;
+        const vp = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = vp.width; canvas.height = vp.height;
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+        const res = await Tesseract.recognize(canvas, lang, {
+          logger: m => { if(m.status==='recognizing text') setBar((p-1+m.progress)/N); }
+        });
+        lines = (res.data.text || '').split('\n').map(s=>s.trim()).filter(s=>s.length);
+        log(`第 ${p} 頁：掃描頁 → OCR 完成`);
+      } else {
+        log(`第 ${p} 頁：數位文字層 → 直接擷取`);
+      }
+
+      for(const line of lines) children.push(new Paragraph({ children:[ new TextRun(line) ] }));
+
+      // 2) 內嵌圖片（盡力擷取；數位頁的插圖、掃描頁的非整頁圖）
+      try{
+        const ops = await page.getOperatorList();
+        for(let i=0;i<ops.fnArray.length;i++){
+          if(ops.fnArray[i] === pdfjsLib.OPS.paintImageXObject){
+            const name = ops.argsArray[i][0];
+            const obj = await getObj(page, name);
+            if(!obj) continue;
+            const png = imgToPng(obj);
+            if(!png) continue;
+            // 掃描頁的整頁大圖略過（已 OCR 成文字，避免重複）
+            const coversPage = png.w >= baseVp.width*0.85 && png.h >= baseVp.height*0.85;
+            if(isScanned && coversPage) continue;
+            let dispW = Math.min(600, png.w);
+            let dispH = png.h * (dispW / png.w);
+            children.push(new Paragraph({ children:[ new ImageRun({
+              data: dataURLtoU8(png.url), transformation:{ width: dispW, height: dispH }
+            })]}));
+          }
+        }
+      }catch(e){ /* 圖片擷取失敗不影響文字 */ }
+
+      if(p < N) children.push(new Paragraph({ children:[ new PageBreak() ] }));
+      setBar(p/N);
+    }
+
+    setStatus('<span class="spinner"></span>產生 Word 檔…');
+    const doc = new Document({ sections:[{ children }] });
+    const blob = await Packer.toBlob(doc);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = file.name.replace(/\.pdf$/i,'') + '.docx';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+
+    setStatus('✓ 完成！Word 檔已下載，內容已清空','ok');
+    reset();
+    setTimeout(()=>{ if(statusEl.classList.contains('ok')){ setStatus(''); barWrap.style.display='none'; } }, 5000);
+  }catch(err){
+    console.error(err);
+    setStatus('❌ 發生錯誤：' + err.message, 'err');
+  }
+}
+</script>
+</body>
+</html>

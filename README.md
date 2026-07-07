@@ -4,8 +4,16 @@
 
 ## 工具
 
-### 1. `pdf_to_word_web/` — PDF → Word 轉換器（網頁版）
-把 PDF 拖進網頁，自動萃取內容並下載 Word 檔：**文字→文字、圖片→圖片**。
+### 0. 🌐 免安裝網頁版 PDF → Word（推薦給一般使用者）
+打開連結、把 PDF 拖進去就能下載 Word，**文字→文字、圖片→圖片**。
+全程在瀏覽器執行（pdf.js + Tesseract.js OCR + docx.js），**檔案不上傳、免裝任何東西**。
+
+👉 **線上使用：** https://9mchiu.github.io/ai-pose-pdf-extractor/
+
+原始碼在 [`docs/index.html`](docs/index.html)。掃描頁用瀏覽器內建 OCR，品質中等；要最高品質可用下方需 API key 的版本。
+
+### 1. `pdf_to_word_web/` — PDF → Word 轉換器（Claude 版，需 API key）
+本機跑 Flask，品質最好（Claude 視覺判讀，圖片區域分離較準）。適合進階使用。
 詳見 [`pdf_to_word_web/README.md`](pdf_to_word_web/README.md)。
 
 ```bash
