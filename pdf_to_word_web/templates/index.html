@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF → Word 轉換器</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft JhengHei', '微軟正黑體', -apple-system, Arial, sans-serif;
+            background: linear-gradient(135deg, #eef2f7 0%, #dfe7f0 100%);
+            min-height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            color: #2c3e50;
+        }
+        .card {
+            width: min(92vw, 560px);
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(44, 62, 80, 0.12);
+            padding: 40px;
+            text-align: center;
+        }
+        h1 { font-size: 24px; margin-bottom: 6px; }
+        .subtitle { color: #7f8c9a; font-size: 14px; margin-bottom: 28px; }
+        #drop {
+            border: 3px dashed #a9bcd0;
+            border-radius: 16px;
+            padding: 48px 20px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: #f7fafc;
+        }
+        #drop.hover { border-color: #4a90d9; background: #eaf3fc; transform: scale(1.01); }
+        #drop .icon { font-size: 46px; }
+        #drop .hint { margin-top: 12px; color: #5a6b7b; font-size: 15px; }
+        #drop .sub { margin-top: 6px; color: #9aa8b5; font-size: 13px; }
+        input[type=file] { display: none; }
+        .status { margin-top: 24px; min-height: 24px; font-size: 14px; }
+        .spinner {
+            display: inline-block; width: 18px; height: 18px;
+            border: 3px solid #cfe0f0; border-top-color: #4a90d9;
+            border-radius: 50%; animation: spin 0.8s linear infinite;
+            vertical-align: middle; margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .ok { color: #27ae60; font-weight: bold; }
+        .err { color: #e74c3c; font-weight: bold; }
+        .file-name { color: #4a90d9; font-weight: bold; margin-top: 14px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>📄 PDF → Word 轉換器</h1>
+        <div class="subtitle">拖拉 PDF 到下方區域，文字轉文字、圖片保留為圖片，下載 Word 檔</div>
+
+        <div id="drop">
+            <div class="icon">📥</div>
+            <div class="hint">把 PDF 拖到這裡</div>
+            <div class="sub">或點擊選擇檔案</div>
+        </div>
+        <input type="file" id="fileInput" accept="application/pdf">
+
+        <div class="file-name" id="fileName"></div>
+        <div class="status" id="status"></div>
+    </div>
+
+    <script>
+        const drop = document.getElementById('drop');
+        const fileInput = document.getElementById('fileInput');
+        const statusEl = document.getElementById('status');
+        const fileNameEl = document.getElementById('fileName');
+
+        drop.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', () => { if (fileInput.files[0]) handle(fileInput.files[0]); });
+
+        ['dragenter', 'dragover'].forEach(ev =>
+            drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('hover'); }));
+        ['dragleave', 'drop'].forEach(ev =>
+            drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('hover'); }));
+        drop.addEventListener('drop', e => {
+            const f = e.dataTransfer.files[0];
+            if (f) handle(f);
+        });
+
+        async function handle(file) {
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                setStatus('請選擇 PDF 檔', 'err'); return;
+            }
+            fileNameEl.textContent = file.name;
+            setStatus('<span class="spinner"></span>轉換中，頁數多時可能需要 1~2 分鐘，請稍候…');
+
+            const fd = new FormData();
+            fd.append('file', file);
+            try {
+                const resp = await fetch('/convert', { method: 'POST', body: fd });
+                if (!resp.ok) {
+                    const data = await resp.json().catch(() => ({ error: '轉換失敗' }));
+                    setStatus('❌ ' + (data.error || '轉換失敗'), 'err');
+                    return;
+                }
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = file.name.replace(/\.pdf$/i, '') + '.docx';
+                document.body.appendChild(a); a.click(); a.remove();
+                URL.revokeObjectURL(url);
+                setStatus('✓ 完成！Word 檔已下載，內容已清空', 'ok');
+                reset();   // 下載後清空：重置上傳區、清掉檔名與已選檔案
+                setTimeout(() => { if (statusEl.classList.contains('ok')) setStatus(''); }, 4000);
+            } catch (err) {
+                setStatus('❌ 發生錯誤：' + err.message, 'err');
+            }
+        }
+
+        function setStatus(html, cls) {
+            statusEl.className = 'status ' + (cls || '');
+            statusEl.innerHTML = html;
+        }
+
+        function reset() {
+            fileInput.value = '';       // 清掉已選檔案，避免殘留
+            fileNameEl.textContent = '';
+        }
+    </script>
+</body>
+</html>

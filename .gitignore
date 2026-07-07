@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# 使用者資料 / 輸出（不上傳）
+pdfs/*.pdf
+pdfs/*.PDF
+output/
+*.docx
+
+# 系統
+.DS_Store
